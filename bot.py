@@ -1,11 +1,17 @@
 # Twitch Chat Bot Configuration File
-from config import TMI_TOKEN, CLIENT_ID, BOT_NICK, BOT_PREFIX, CHANNEL, DB
+from config import TMI_TOKEN, CLIENT_ID, BOT_NICK, BOT_PREFIX, CHANNEL, DB, LOG
 
 # Sqlite Interface
 import sqlite3
 
+# Datetime library (for timestamp)
+from datetime import datetime
+
 # Global database connection variable
 conn = None
+
+# Global Logging file
+log = None
 
 # Allows code to run when script is terminated
 import atexit
@@ -20,15 +26,59 @@ bot = commands.Bot(
     client_id=CLIENT_ID,
     nick=BOT_NICK,
     prefix=BOT_PREFIX,
-    initial_channels=[CHANNEL]
+    initial_channels=CHANNEL
 )
+
+# Used for reporting to text and
+# command line log in one statement
+def report(message):
+
+    # Use global log reference
+    global log
+
+    # Create the output timestamp message
+    msg = '[' + timestamp() + '] ' + message + '\n'
+
+    # If the log file is declared
+    if log:
+        # Write to it
+        log.write(msg)
+
+    # Print log message to terminal (without adding newline)
+    print(msg,end='')
+
+# Generates a timestamp for the current
+# system time and returns it
+def timestamp():
+
+    # Retrieve the current time
+    time = datetime.now();
+
+    # Convert current time to timestamp
+    timestamp = time.strftime('%d-%m-%y %H:%M:%S');
+
+    # Return the timestamp object
+    return timestamp
+
 
 def start_db():
 
-    print ('Bot started, connecting to db ...')
+    # Use global connection / log variables
+    global conn,log
 
-    # Use global connection variable
-    global conn
+    # Connect to the log file
+    try:
+
+        # Open the log file
+        log = open(LOG,'a')
+
+        report('Log file opened successfully.')
+
+    # Failure opening log file
+    except Exception as e:
+
+        # Report failure to terminal
+        report('Failed to open log file! Reason: ' + str(e))
 
     # Connect to the database
     try:
@@ -40,20 +90,24 @@ def start_db():
         c = conn.cursor()
 
         # Execute table creation query
-        c.execute('CREATE TABLE IF NOT EXISTS SETS (USER TEXT, CHANNEL TEXT, DATA TEXT)')
+        c.execute('CREATE TABLE IF NOT EXISTS SETS (USER TEXT, CHANNEL TEXT, DATA TEXT, TIME TEXT)')
 
         # Commit the change to the database
         conn.commit()
 
+        # Log that the connection was successful.
+        report('Database connection successful.')
+
+    # Fail to connect to the database file
     except Exception as e:
-        print('Failed to connect to database! Reason:', e)
+        report('Failed to connect to database! Reason: ' + str(e))
 
 def close_db():
 
-    print('Bot stopped, closing db connection ...')
+    report('Bot stopped, closing db connection ...')
 
     # Use global connection variable
-    global conn
+    global conn, log
 
     # If conn is connected
     if conn:
@@ -65,6 +119,14 @@ def close_db():
 
         # Null out the variable
         conn = None
+
+    # If the log file is open
+    if log:
+        # Close it
+        log.close()
+
+        # Null out the variable
+        log = None
 
 @bot.event  # Channel message event
 async def event_message(ctx):
@@ -91,18 +153,20 @@ async def event_message(ctx):
 
         # If we are connected to the database
         if conn:
+
             # Create database query
             c = conn.cursor()
 
             # Execute database insert query for set
-            c.execute('INSERT INTO SETS VALUES ("' + name + '","' + channel + '","' + set + '")')
+            c.execute('INSERT INTO SETS VALUES ("' + name + '","'  + channel + '","' + set + '","' + timestamp() + '")')
 
             # Report that a set was inserted
-            print('Set for',name,'on channel',channel,'was inserted.');
+            report('Set for ' + name + ' on channel ' + channel + ' was inserted.')
 
+        # Database connection failed
         else:
-            # Print the message metadata
-            print(name, channel, set)
+            # Log the inserted row to the command line 
+            report('("' + name + '","'  + channel + '","' + set + '","' + timestamp() + '")')
 
 
 # If this file is not exported as a module
