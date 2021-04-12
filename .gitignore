@@ -1,2 +1,4 @@
 config.py
-sets.db
+logs.txt
+*.db
+*.db-journal
